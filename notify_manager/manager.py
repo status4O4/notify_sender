@@ -1,3 +1,4 @@
+import logging
 from typing import Dict
 from enum import Enum
 
@@ -8,6 +9,8 @@ from .senders.email import EmailSender
 from .senders.sms import SMSSender
 from .senders.tg import TgSender
 from .config.config import app_config
+
+logger = logging.getLogger(__name__)
 
 
 class SenderType(Enum):
@@ -28,19 +31,49 @@ class NotifyManager:
         self._initialized = False
         self._config = app_config
 
-    def initialize(self) -> None:
+    async def initialize(self) -> None:
+        """
+        Инициализирует все доступные отправители уведомлений.
+        Тестирует подключение для каждого типа и добавляет только рабочие.
+        Вызывает исключение, если ни один отправитель не инициализирован.
+        """
         if self._initialized:
             return
 
         for sender_type in SenderType:
             try:
                 config = asdict(app_config[sender_type.value])
-                self._senders[sender_type] = self.SENDER_CLASSES[sender_type](**config)
-            except Exception:
-                pass
+                sender = self.SENDER_CLASSES[sender_type](**config)
+                is_connected = None
+                try:
+                    async with sender as sn:
+                        is_connected = await sn.test_connection()
+
+                        if is_connected:
+                            self._senders[sender_type] = sender
+                        else:
+                            logger.warning(
+                                f"Failed to establish connection with {sender_type}"
+                            )
+                except Exception as err:
+                    logger.warning(
+                        f"Error to establish connection with {sender_type}: {err}"
+                    )
+            except Exception as err:
+                logger.error(err)
+        if not len(self._senders):
+            raise RuntimeError("Failed to initialize services")
+
+        logger.info(
+            f"Notify manager has been initialized. Current senders: {[sender.value for sender in self._senders]}"
+        )
         self._initialized = True
 
     async def send_notify(self, message: str, tg_id: int, email: str, phone: str):
+        """
+        Отправляет уведомление через доступные каналы (email/SMS/Telegram)
+        до первой успешной отправки. Возвращает результат отправки.
+        """
         result = None
 
         for sender_key in self._senders:
@@ -66,7 +99,7 @@ class NotifyManager:
         return result
 
 
-def get_notify_manager() -> NotifyManager:
+async def get_notify_manager() -> NotifyManager:
     notify_manager = NotifyManager()
-    notify_manager.initialize()
+    await notify_manager.initialize()
     return notify_manager

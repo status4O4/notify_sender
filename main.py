@@ -1,3 +1,4 @@
+import logging
 import re
 import uuid
 from contextlib import asynccontextmanager
@@ -10,16 +11,19 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, EmailStr, field_validator
 
 from notify_manager.manager import get_notify_manager
-
+from logger import setup_logging
 
 scheduler = AsyncIOScheduler()
-notify_manager = get_notify_manager()
+notify_manager = None
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global notify_manager
+    setup_logging()
+    notify_manager = await get_notify_manager()
     scheduler.start()
-    notify_manager.initialize()
     yield
     scheduler.shutdown()
 
@@ -80,8 +84,6 @@ async def send_notification(notification_id: str):
         tg_id=notification.get("tg_id"),
         message=notification.get("message"),
     )
-
-    print(result)
 
     task_status = "sent"
     if not result or result.get("error"):

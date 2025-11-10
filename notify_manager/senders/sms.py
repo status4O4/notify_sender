@@ -1,7 +1,10 @@
+import logging
 import asyncio
 import aiohttp
 from typing import Optional
 from .base import AbstractSender
+
+logger = logging.getLogger(__name__)
 
 
 class SMSSender(AbstractSender):
@@ -18,6 +21,13 @@ class SMSSender(AbstractSender):
         async with self._lock:
             if self._reference_count == 0:
                 self._session = aiohttp.ClientSession()
+                logger.info(
+                    f"SMSSender session created. reference_count={self._reference_count + 1}"
+                )
+            else:
+                logger.info(
+                    f"SMSSender session received. reference_count={self._reference_count + 1}"
+                )
             self._reference_count += 1
 
     async def disconnect(self) -> None:
@@ -27,10 +37,36 @@ class SMSSender(AbstractSender):
                 if self._reference_count == 0 and self._session:
                     try:
                         await self._session.close()
-                    except Exception:
-                        pass
+                    except Exception as err:
+                        logging.warning(err)
                     finally:
                         self._session = None
+                        logger.info(
+                            f"SMSSender session closed. reference_count={self._reference_count}"
+                        )
+
+    async def test_connection(self) -> bool:
+        try:
+            if not self._session:
+                return False
+            data = {
+                "login": self.username,
+                "psw": self.password,
+                "phones": "",
+                "mes": "",
+                "id": "",
+            }
+            async with self._session.post(self.base_url, json=data) as response:
+                response_data = await response.json()
+                error = response_data.get("error", None)
+                if response.status == 200 and not error:
+                    return True
+                else:
+                    logging.error(error)
+                    return False
+        except Exception as err:
+            logging.error(err)
+            return False
 
     async def send_notify(self, phone: str, notify: str) -> dict:
         data = {
@@ -44,28 +80,30 @@ class SMSSender(AbstractSender):
 
         try:
             if not self._session:
-                raise RuntimeError(
-                    "SMSSender должен использоваться как контекстный менеджер"
-                )
+                raise RuntimeError("Use SMSSender as a context manager!!!!!")
             async with self._session.post(self.base_url, json=data) as response:
                 response_data = await response.json()
                 error = response_data.get("error", None)
                 if response.status == 200 and not error:
-                    return {
+                    result = {
                         "success": True,
-                        "message": "SMS отправлен успешно",
+                        "message": "SMS sent successfully",
                         "error": None,
                     }
+                    logger.info(result.get("message"))
+                    return result
                 else:
+                    logger.error(error)
                     return {
                         "success": False,
-                        "message": f"Ошибка отправки SMS: {error}",
+                        "message": f"Failed to send SMS: {str(error)}",
                         "error": response.status,
                     }
 
-        except Exception as e:
+        except Exception as err:
+            logger.error(err)
             return {
                 "success": False,
-                "message": f"Ошибка отправки SMS: {str(e)}",
-                "error": e,
+                "message": f"Ошибка отправки SMS: {str(err)}",
+                "error": err,
             }

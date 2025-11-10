@@ -1,9 +1,12 @@
+import logging
 import asyncio
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import aiosmtplib
 from typing import List, Dict, Any, Optional
 from .base import AbstractSender
+
+logger = logging.getLogger(__name__)
 
 
 class EmailSender(AbstractSender):
@@ -39,7 +42,13 @@ class EmailSender(AbstractSender):
 
                 if self.username and self.password:
                     await self._session.login(self.username, self.password)
-
+                logger.info(
+                    f"EmailSender session created. reference_count={self._reference_count + 1}"
+                )
+            else:
+                logger.info(
+                    f"EmailSender session received. reference_count={self._reference_count + 1}"
+                )
             self._reference_count += 1
 
     async def disconnect(self) -> None:
@@ -53,10 +62,13 @@ class EmailSender(AbstractSender):
                     except Exception:
                         try:
                             await self._session.close()
-                        except Exception:
-                            pass
+                        except Exception as err:
+                            logging.warning(err)
                     finally:
                         self._session = None
+                        logger.info(
+                            f"EmailSender session closed. reference_count={self._reference_count}"
+                        )
 
     def _create_message(
         self,
@@ -77,15 +89,23 @@ class EmailSender(AbstractSender):
 
         return message
 
+    async def test_connection(self) -> bool:
+        try:
+            if not self._session:
+                return False
+
+            response = await self._session.noop()
+            return response.code == 250
+        except Exception as err:
+            logger.error(err)
+            return False
+
     async def send_notify(
         self,
         to_addrs: List[str],
         subject: str,
         notify: str,
     ) -> Dict[str, Any]:
-        if not self._session:
-            await self.connect()
-
         recipients = to_addrs.copy()
 
         message = self._create_message(
@@ -97,22 +117,22 @@ class EmailSender(AbstractSender):
 
         try:
             if not self._session:
-                raise RuntimeError(
-                    "EmailSender должен использоваться как контекстный менеджер"
-                )
+                raise RuntimeError("Use EmailSender as a context manager!!!!!")
             await self._session.send_message(
                 message, sender=self.username, recipients=recipients
             )
-
-            return {
+            result = {
                 "success": True,
-                "message": "Email отправлен успешно",
+                "message": "Email sent successfully",
                 "error": None,
             }
+            logger.info(result.get("message"))
+            return result
 
-        except Exception as e:
+        except Exception as err:
+            logger.error(err)
             return {
                 "success": False,
-                "message": f"Ошибка отправки email: {str(e)}",
-                "error": e,
+                "message": f"Failed to send email: {str(err)}",
+                "error": err,
             }

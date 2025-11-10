@@ -3,6 +3,16 @@ from typing import Dict, Any
 
 
 class AbstractSender(ABC):
+    """
+    Абстрактный базовый класс для сендеров.
+    Реализует паттерн контекстного менеджера для экономии ресурсов - соединения
+    устанавливаются только на время отправки уведомлений, так как сервис работает
+    эпизодически и не требует постоянно открытых соединений.
+
+    (соединения используются повторно если несколько уведомлений пытаются
+    отправиться в одно время).
+    """
+
     async def __aenter__(self):
         await self.connect()
         return self
@@ -20,4 +30,8 @@ class AbstractSender(ABC):
 
     @abstractmethod
     async def send_notify(self, *args, **kwargs) -> Dict[str, Any]:
+        pass
+
+    @abstractmethod
+    async def test_connection(self) -> bool:
         pass
