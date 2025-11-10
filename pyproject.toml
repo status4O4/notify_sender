@@ -1,0 +1,15 @@
+[project]
+name = "notify-sender"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiogram>=3.22.0",
+    "aiosmtplib>=5.0.0",
+    "apscheduler>=3.11.1",
+    "fastapi>=0.121.1",
+    "pydantic[email,phone]>=2.11.10",
+    "python-dotenv>=1.2.1",
+    "uvicorn>=0.38.0",
+]
