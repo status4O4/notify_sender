@@ -3,13 +3,18 @@
 REST API сервис для отправки уведомлений.
 
 ## Быстрый запуск
+1. Создайте виртуальное окружение и активируйте его:
+```bash
+python -m venv venv
+source venv/bin/activate
+```
 
-1. Установите зависимости:
+2. Установите зависимости:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Создайте `.env` файл:
+3. Создайте `.env` файл:
 ```env
 # Email (Yandex)
 EMAIL_NOTIFIER_HOST=smtp.yandex.ru
